@@ -25,12 +25,6 @@ def picklecache(path, forced=False, min_time=None):
     Set `min_time` to the last significant change to the code within the function.
     If the cached file is older than this `min_time`, the file is regenerated.
 
-    Usage:
-        @picklecachefun.cache('/some/path/to/a/file', min_time='2025-12-27T10:12:32')
-        def some_function(some_arg):
-            ....
-            return stuff
-
     Args:
         path: The path where the function's result is stored.
         forced: do not load from disk, always recreate the cached version
@@ -39,6 +33,15 @@ def picklecache(path, forced=False, min_time=None):
 
     Returns:
         The decorator.
+
+
+    Examples:
+        .. code:: python
+
+            @picklecache('/some/path/to/a/file', min_time='2025-12-27T10:12:32')
+            def some_function(some_arg):
+               ...
+               return stuff
     """
 
     def decorator(f):

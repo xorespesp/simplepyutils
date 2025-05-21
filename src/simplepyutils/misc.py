@@ -2,9 +2,13 @@ import collections
 import glob
 import itertools
 import multiprocessing
+import multiprocessing.dummy
+import ctypes
+import signal
 
 
 def all_disjoint(*seqs):
+    """Check if all sequences are disjoint, i.e., have no repeated elements."""
     union = set()
     for item in itertools.chain(*seqs):
         if item in union:
@@ -30,9 +34,11 @@ def is_running_in_jupyter_notebook():
 def progressbar(iterable=None, step=None, *args, **kwargs):
     # noinspection PyUnresolvedReferences
     import tqdm
+
     # noinspection PyUnresolvedReferences
     import tqdm.notebook
     import sys
+
     if is_running_in_jupyter_notebook():
         if step is None:
             return tqdm.notebook.tqdm(iterable, *args, **kwargs)
@@ -46,8 +52,18 @@ def progressbar(iterable=None, step=None, *args, **kwargs):
             pbar = tqdm.tqdm(None, *args, dynamic_ncols=True, **kwargs)
             return StepProgress(pbar, iterable, step)
     elif iterable is None:
+
         class X:
             def update(self, *a, **kw):
+                pass
+
+            def set_description(self, *a, **kw):
+                pass
+
+            def close(self):
+                pass
+
+            def set_postfix(self, *a, **kw):
                 pass
 
         return X()
@@ -73,7 +89,12 @@ class StepProgress:
         self.pbar.close()
 
     def update(self, n=1):
-        self.pbar.update(n * self.step)
+        # if we are at the end, then set it to 100%, so check the total and see if we are reaching it if we add n*step. if yes, set it to total
+        if self.pbar.total is not None and self.pbar.n + n * self.step >= self.pbar.total:
+            self.pbar.n = self.pbar.total
+            self.pbar.update(0)
+        else:
+            self.pbar.update(n * self.step)
 
     def set_description(self, desc):
         self.pbar.set_description(desc)
@@ -85,6 +106,7 @@ class StepProgress:
 def zip_progressbar(iterable=None, *args, **kwargs):
     pbar = progressbar(iterable, *args, **kwargs)
     if pbar is iterable:
+
         class X:
             def set_description(self, *a, **kw):
                 pass
@@ -100,11 +122,16 @@ def progressbar_items(dictionary, *args, **kwargs):
     return progressbar(dictionary.items(), total=len(dictionary), *args, **kwargs)
 
 
-def parallel_map_with_progbar(fn, items, pool=None, desc=None):
+def parallel_map_with_progbar(fn, items, pool=None, desc=None, total=None, use_threads=False):
     if pool is None:
-        pool = multiprocessing.Pool()
+        pool = multiprocessing.dummy.Pool() if use_threads else multiprocessing.Pool()
 
-    return list(progressbar(pool.imap(fn, items), total=len(items), desc=desc))
+    if total is None:
+        try:
+            total = len(items)
+        except TypeError:
+            pass
+    return list(progressbar(pool.imap(fn, items), total=total, desc=desc))
 
 
 def groupby_map(items, key_and_value_fn):
@@ -134,5 +161,15 @@ def sorted_recursive_glob(pattern):
     return sorted(glob.glob(pattern, recursive=True))
 
 
-def rounded_int_tuple(p):
-    return tuple([round(x) for x in p])
+def rounded_int_tuple(p, divisor=1):
+    return tuple([round(x / divisor) * divisor for x in p])
+
+
+def terminate_on_parent_death():
+    """Set the PR_SET_PDEATHSIG flag to SIGTERM, so that the process is terminated when the parent dies."""
+    prctl = ctypes.CDLL("libc.so.6").prctl
+    PR_SET_PDEATHSIG = 1
+    prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
+
+    # without this, a single CTRL+C leaves the process hanging
+    signal.signal(signal.SIGINT, signal.SIG_IGN)

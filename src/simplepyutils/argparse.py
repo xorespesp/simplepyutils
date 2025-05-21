@@ -6,24 +6,43 @@ import shlex
 import socket
 import sys
 
-FLAGS = argparse.Namespace()
-logger = logging.getLogger('')
+FLAGS = argparse.Namespace()  #: Global namespace for command line arguments
+logger = logging.getLogger('')  #: Global logger
 
 
 class ParseFromFileAction(argparse.Action):
+    """Action to parse arguments from a file.
+
+    The file should contain one argument per line. Empty lines and lines starting with '#' are
+    ignored. The arguments are parsed as if they were passed on the command line.
+
+    """
+
     def __call__(self, parser, namespace, values, option_string=None):
-        with values as f:
+        with open(values, 'r') as f:
             lines = f.read().splitlines()
+            lines = [line.strip() for line in lines]
             args = [f'--{line}' for line in lines if line and not line.startswith('#')]
             parser.parse_args(args, namespace)
 
 
 class HyphenToUnderscoreAction(argparse.Action):
+    """Action to replace hyphens with underscores in the argument value.
+
+    For example, if the argument value is 'foo-bar', it will be converted to 'foo_bar'.
+    """
+
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, values.replace('-', '_'))
 
 
 class BoolAction(argparse.Action):
+    """Action to parse boolean arguments.
+
+    Specifically, it generates a positive and a negative version of the argument, so
+    it is possible to use --arg and --no-arg.
+    """
+
     def __init__(self, option_strings, dest, default=False, required=False, help=None):
         positive_opts = option_strings
         if not all(opt.startswith('--') for opt in positive_opts):
@@ -31,12 +50,14 @@ class BoolAction(argparse.Action):
         if any(opt.startswith('--no-') for opt in positive_opts):
             raise ValueError(
                 'Boolean arguments cannot start with --no-, the --no- version will be '
-                'auto-generated')
+                'auto-generated'
+            )
 
         negative_opts = ['--no-' + opt[2:] for opt in positive_opts]
         opts = [*positive_opts, *negative_opts]
         super().__init__(
-            opts, dest, nargs=0, const=None, default=default, required=required, help=help)
+            opts, dest, nargs=0, const=None, default=default, required=required, help=help
+        )
 
     def __call__(self, parser, namespace, values, option_string=None):
         if option_string.startswith('--no-'):
@@ -56,6 +77,7 @@ def initialize(parser, args=None):
     if sys.stdout.isatty():
         # Make sure that the log messages appear above the tqdm progess bars
         import tqdm
+
         class TQDMFile:
             def write(self, x):
                 if len(x.rstrip()) > 0:
@@ -93,8 +115,10 @@ def initialize_with_logfiles(parser, logdir_root, args=None):
     simple_formatter = logging.Formatter('{asctime}-{levelname:^1.1} -- {message}', style='{')
     hostname = socket.gethostname().split('.', 1)[0]
     detailed_formatter = logging.Formatter(
-        f'{{asctime}} - {hostname} - {{process}} - {{processName:^12.12}} -' +
-        ' {threadName:^12.12} - {name:^12.12} - {levelname:^7.7} -- {message}', style='{')
+        f'{{asctime}} - {hostname} - {{process}} - {{processName:^12.12}} -'
+        + ' {threadName:^12.12} - {name:^12.12} - {levelname:^7.7} -- {message}',
+        style='{',
+    )
 
     simple_logfile_handler.setFormatter(simple_formatter)
     detailed_logfile_handler.setFormatter(detailed_formatter)
@@ -107,6 +131,7 @@ def initialize_with_logfiles(parser, logdir_root, args=None):
 
         # Make sure that the log messages appear above the tqdm progess bars
         import tqdm
+
         class TQDMFile:
             def write(self, x):
                 if len(x.rstrip()) > 0:
@@ -139,4 +164,5 @@ def ensure_absolute_path(path, root):
 
 def flags_getter():
     import simplepyutils
+
     return simplepyutils.FLAGS
